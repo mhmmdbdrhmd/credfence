@@ -395,6 +395,60 @@ clean = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", screen)
 check("the browser says it ignored the paste",
       "ignored here" in clean or "paste" in clean.lower(), clean[-300:])
 
+# ------------------------------------ 8. echo is off BEFORE the prompt appears
+# The prompt used to be written first and echo turned off after it. Whatever
+# arrived in between was echoed: on a phone under proot the gap was long enough
+# for a paste sent the moment the prompt appeared to land on the screen every
+# time, and on a fast machine too short to ever see. Timing cannot pin that
+# down, so this makes turning echo off slow on purpose. Written in the right
+# order, the prompt only appears once echo is already off, however long that
+# takes; in the wrong order, the paste arrives during the delay and is echoed.
+SLOW = os.path.join(TH.VLT_HOME, "slow_echo_off.py")
+with open(SLOW, "w") as fh:
+    fh.write(
+        "import importlib.machinery, importlib.util, sys, termios, time\n"
+        "real = termios.tcsetattr\n"
+        "def slow(*a):\n"
+        "    time.sleep(0.5)\n"
+        "    return real(*a)\n"
+        "termios.tcsetattr = slow\n"
+        "loader = importlib.machinery.SourceFileLoader('vltcli', %r)\n"
+        "spec = importlib.util.spec_from_loader('vltcli', loader)\n"
+        "mod = importlib.util.module_from_spec(spec)\n"
+        "loader.exec_module(mod)\n"
+        "v = mod._read_field('secret (hidden): ', hidden=True)\n"
+        "sys.stdout.write('\\nlength=%%d\\n' %% len(v))\n" % TH.VLT)
+
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvpe(sys.executable, [sys.executable, SLOW], TH.HUMAN)
+seen = b""
+deadline = time.time() + 20
+while b"secret (hidden): " not in seen and time.time() < deadline:
+    if _readable(fd, 0.2):
+        try:
+            seen += os.read(fd, 4096)
+        except OSError:
+            break
+os.write(fd, b"EXAMPLEechoProbe42\n")          # at once, as a paste would
+while time.time() < deadline:
+    if not _readable(fd, 0.5):
+        if b"length=" in seen:
+            break
+        continue
+    try:
+        chunk = os.read(fd, 4096)
+    except OSError:
+        break
+    if not chunk:
+        break
+    seen += chunk
+os.waitpid(pid, 0)
+check("a value sent the instant the prompt appears still arrives",
+      b"length=18" in seen, seen[-120:])
+check("and is not echoed, even when turning echo off is slow",
+      b"EXAMPLEechoProbe42" not in seen, seen[-120:])
+
 print()
 print("all clear" if not fails else "%d FAILURE(S): %s" % (len(fails), fails))
 sys.exit(1 if fails else 0)

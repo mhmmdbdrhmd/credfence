@@ -1,6 +1,6 @@
 <h1 align="center">credfence</h1>
 <p align="center"><i>Let coding agents use your credentials without ever seeing them</i></p>
-<p align="center"><a href="https://github.com/mhmmdbdrhmd/credfence/actions"><img alt="CI" src="https://github.com/mhmmdbdrhmd/credfence/actions/workflows/tests.yml/badge.svg"></a> <img alt="platform" src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-6E7681?style=flat-square"> <img alt="python" src="https://img.shields.io/badge/python-3.8%2B-3776AB?style=flat-square&logo=python&logoColor=white"> <img alt="crypto" src="https://img.shields.io/badge/AES--256--GCM-per%20record-E7352C?style=flat-square"> <img alt="tests" src="https://img.shields.io/badge/tests-456%20assertions-58A6FF?style=flat-square"> <img alt="license" src="https://img.shields.io/badge/license-MIT-3FB950?style=flat-square"></p>
+<p align="center"><a href="https://github.com/mhmmdbdrhmd/credfence/actions"><img alt="CI" src="https://github.com/mhmmdbdrhmd/credfence/actions/workflows/tests.yml/badge.svg"></a> <img alt="platform" src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-6E7681?style=flat-square"> <img alt="python" src="https://img.shields.io/badge/python-3.8%2B-3776AB?style=flat-square&logo=python&logoColor=white"> <img alt="crypto" src="https://img.shields.io/badge/AES--256--GCM-per%20record-E7352C?style=flat-square"> <img alt="tests" src="https://img.shields.io/badge/tests-458%20assertions-58A6FF?style=flat-square"> <img alt="license" src="https://img.shields.io/badge/license-MIT-3FB950?style=flat-square"></p>
 
 > An agent can find out that a GitHub token exists, confirm it starts `ghp_` and
 > is 40 characters, and run `gh` with it in the environment — **without the value
@@ -524,7 +524,7 @@ python3 tests/run_all.py --fast     # skip the pty-driven UI suites
 python3 tests/run_all.py --count    # assertions per suite
 ```
 
-**456 assertions across 18 suites**, all passing, every one of them against a
+**458 assertions across 18 suites**, all passing, every one of them against a
 throwaway vault in a temp directory — never your real one, and never your
 keyring. That isolation is not tidiness: an earlier version ran against the
 developer's live vault, and a test that unmasked a field printed a production
@@ -549,7 +549,8 @@ The four worth knowing about:
   field *names* while never printing a field *value*.
 - **`multiline_test.py`** — a credential that spans lines (an SSH key, a
   certificate) survives every entry path intact, and a paste is never executed
-  as keystrokes.
+  as keystrokes, or echoed: echo goes off before a hidden prompt is shown, and a
+  deliberately slow echo-off proves the order rather than a race.
 - **`sshkey_test.py`** — generates a real key with `ssh-keygen`, puts it
   through the vault, and asks **`ssh-keygen -y`** to accept what came back. It
   also asserts that OpenSSH *rejects* the same key with its trailing newline
@@ -573,7 +574,7 @@ The four worth knowing about:
 Being straight about what has been checked and what has not.
 
 **Verified — the suites, on this machine.** `python3 tests/run_all.py` runs 18
-suites and 456 assertions, and all pass; `--count`
+suites and 458 assertions, and all pass; `--count`
 reproduces that number per suite. The repository also passes from a **bare
 clone**, and `install.sh` succeeds from that clone into a sandbox prefix.
 

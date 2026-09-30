@@ -246,12 +246,8 @@ def _read_field(label, hidden=False, multiline=False):
     Echo is suppressed by hand instead of by getpass, because getpass restores
     the terminal with TCSAFLUSH and throws away the rest of the paste.
     """
-    hint = ""
-    if multiline:
-        hint = "  (paste it, then Ctrl-D — or a line with a single '.')\n"
-    sys.stdout.write(hint + label)
-    sys.stdout.flush()
-
+    # Echo goes off BEFORE the prompt is shown: anything typed or pasted the
+    # moment the prompt appears would otherwise be echoed in the gap.
     fd = None
     saved = None
     if hidden and sys.stdin.isatty():
@@ -264,6 +260,12 @@ def _read_field(label, hidden=False, multiline=False):
             termios.tcsetattr(fd, termios.TCSADRAIN, quiet)
         except Exception:
             fd = saved = None
+
+    hint = ""
+    if multiline:
+        hint = "  (paste it, then Ctrl-D — or a line with a single '.')\n"
+    sys.stdout.write(hint + label)
+    sys.stdout.flush()
 
     lines = []
     absorbing = False           # a paste is arriving; keep reading it
