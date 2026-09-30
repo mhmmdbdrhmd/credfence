@@ -42,6 +42,7 @@ USE_VLT = (
 SELF_PATHS = [
     os.path.join(HOME, ".claude/hooks/vault-guard.py"),
     os.path.join(HOME, ".local/bin/vlt"),
+    os.path.join(HOME, ".local/bin/vlt-ssh"),
     os.path.join(VLT_HOME, "vltlib.py"),
     os.path.join(VLT_HOME, "policy.json"),
     os.path.join(VLT_HOME, "guard.mode"),

@@ -30,6 +30,8 @@ SUITES = [
                                    # must not become keystrokes
     ("scan_test",    False, 90),   # the inventory report, and its silence
     ("sshkey_test",  False, 90),   # a real OpenSSH key, judged by OpenSSH
+    ("vltssh_test",  False, 120),  # vlt-ssh: key and password logins, and
+                                   # a real one against a local sshd
     ("notes_test",   True, 180),   # a note that spans lines must not
                                    # write over the pane next door
     ("keyring_test", False, 60),   # real keychain / Secret Service round trip

@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+# vlt-ssh — ssh to a host whose login lives in the vault, without seeing it.
+#
+#   vlt-ssh [ssh options] <vault-name> [command...]
+#
+#   vlt-ssh vps/alpha/ssh                             interactive shell
+#   vlt-ssh vps/alpha/ssh uptime                      run one command
+#   vlt-ssh -N -L 8080:localhost:80 vps/alpha/ssh     any ssh option works
+#
+# The record supplies host, port, username and a key and/or a password, under
+# whatever variable names its env_map gives them. `vlt exec` injects them into
+# this script's environment; none of them is ever put on a command line.
+#
+#   key       written to a private 0600 file, on a RAM-backed directory where
+#             one exists, passed with -i, and deleted when ssh exits
+#   password  handed to sshpass through $SSHPASS (sshpass -e), never as -p
+#   both      the key is offered first; the password answers if it is refused
+#
+# Options are ssh's own and go before the name, as they would before a host.
+# Yours take precedence over these defaults:
+#   StrictHostKeyChecking=accept-new   a first connection does not stop on a
+#                                      prompt nobody can answer; a CHANGED
+#                                      host key is still refused
+#   BatchMode=yes (key only, no tty)   fail instead of waiting on a prompt
+#
+# Environment: VLT is the vlt to call (default: vlt on PATH).
+
+set -uo pipefail
+
+PROG=vlt-ssh
+die() { printf '%s: %s\n' "$PROG" "$*" >&2; exit 255; }
+
+usage() {
+  sed -n '2,/^[^#]/{/^#/!q;s/^# \{0,1\}//;p}' "${BASH_SOURCE[0]}"
+  exit "${1:-0}"
+}
+
+VLT_CMD=${VLT:-vlt}
+SELF=$(readlink -f -- "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")
+
+# ================================================================ inner half
+# The child of `vlt exec`: the record's fields are in the environment, and
+# VLT_SSH_VARS says which variable holds which field.
+inner() {
+  # The ssh options and the remote command travel in the environment, quoted
+  # with printf %q, so that `vlt exec` screens only this script's own argv. A
+  # remote command such as 'set -e; make' is not an attempt to print the local
+  # environment, and should not be refused as one.
+  local opts=() rest=()
+  eval "opts=(${VLT_SSH_OPTS:-})"
+  eval "rest=(${VLT_SSH_CMD:-})"
+  unset VLT_SSH_OPTS VLT_SSH_CMD
+
+  # No associative arrays: macOS still ships bash 3.2.
+  local pair f v host= port= user= pass= key=
+  for pair in ${VLT_SSH_VARS:-}; do
+    f=${pair%%=*}; v=${pair#*=}
+    case $f in
+      host) host=${!v:-} ;;
+      port) port=${!v:-} ;;
+      username) user=${!v:-} ;;
+      password) pass=${!v:-} ;;
+      key) key=${!v:-} ;;
+    esac
+    # ssh, and anything it forwards an environment to, has no use for these.
+    unset "$v"
+  done
+  unset VLT_SSH_VARS
+
+  [ -n "$host" ] || die "the record has no host field"
+  [ -n "$key" ] || [ -n "$pass" ] \
+    || die "the record has neither a key nor a password"
+
+  local args=(${opts[@]+"${opts[@]}"})
+  args+=(-o StrictHostKeyChecking=accept-new)
+  [ -n "$port" ] && args+=(-o "Port=$port")
+  [ -n "$user" ] && args+=(-o "User=$user")
+
+  keydir=
+  trap '[ -n "$keydir" ] && rm -rf -- "$keydir"' EXIT
+  trap 'exit 130' INT TERM HUP
+
+  if [ -n "$key" ]; then
+    local base
+    for base in "${XDG_RUNTIME_DIR:-}" /dev/shm "${TMPDIR:-/tmp}"; do
+      [ -n "$base" ] && [ -d "$base" ] && [ -w "$base" ] && break
+    done
+    keydir=$(umask 077 && mktemp -d "$base/vlt-ssh.XXXXXXXX") \
+      || die "cannot create a private directory for the key"
+    # printf is a builtin: the key reaches the file without ever being an
+    # argument to a process. OpenSSH rejects a key that lacks its final
+    # newline, calling it "invalid format", so it always gets one.
+    (umask 077 && printf '%s\n' "${key%$'\n'}" > "$keydir/id") \
+      || die "cannot write the key"
+    key=
+    args+=(-i "$keydir/id" -o IdentitiesOnly=yes)
+    if [ -z "$pass" ] && [ ! -t 0 ]; then
+      args+=(-o BatchMode=yes)
+    fi
+  else
+    # Password only: ask for it before any key an agent happens to hold is
+    # tried, or a full agent ends the session with "too many failures".
+    args+=(-o PreferredAuthentications=keyboard-interactive,password)
+  fi
+
+  args+=(-- "$host" ${rest[@]+"${rest[@]}"})
+
+  local rc
+  if [ -n "$pass" ]; then
+    command -v sshpass >/dev/null \
+      || die "this record logs in with a password, which needs sshpass" \
+             "(apt install sshpass / brew install sshpass)"
+    SSHPASS=$pass sshpass -e ssh "${args[@]}"
+    rc=$?
+    pass=
+    [ $rc -eq 5 ] && printf '%s: the password was refused\n' "$PROG" >&2
+  else
+    ssh "${args[@]}"
+    rc=$?
+  fi
+  return "$rc"
+}
+
+if [ "${1:-}" = "--vlt-ssh-inner" ]; then
+  inner
+  exit $?
+fi
+
+# ================================================================ outer half
+# Split ssh's own options from the vault name, using ssh's option string, so
+# that `-p 22 name` and `-v name` both find the name.
+SSH_GETOPT="1246ab:c:e:fgi:kl:m:no:p:qstvxAB:CD:E:F:GI:J:KL:MNO:P:Q:R:S:TVw:W:XYy"
+
+case "${1:-}" in
+  ""|-h|--help) usage 0 ;;
+esac
+
+opts=()
+while [ $# -gt 0 ]; do
+  a=$1
+  case $a in
+    --) shift; break ;;
+    -?*) ;;
+    *) break ;;
+  esac
+  shift
+  opts+=("$a")
+  # Walk the cluster (-vT, -p22): an option that takes an argument consumes
+  # the rest of the cluster, or the next word.
+  i=1
+  while [ $i -lt ${#a} ]; do
+    c=${a:$i:1}
+    spec=${SSH_GETOPT#*"$c"}
+    [ "$spec" = "$SSH_GETOPT" ] && die "unknown ssh option -$c"
+    if [ "${spec:0:1}" = ":" ]; then
+      if [ $((i + 1)) -ge ${#a} ]; then
+        [ $# -gt 0 ] || die "ssh option -$c needs an argument"
+        opts+=("$1"); shift
+      fi
+      break
+    fi
+    i=$((i + 1))
+  done
+done
+
+[ $# -gt 0 ] || die "no vault name given (see $PROG --help)"
+name=$1; shift
+
+command -v "$VLT_CMD" >/dev/null 2>&1 || die "cannot find vlt ($VLT_CMD)"
+
+# Which variable carries which field. The index holds names and the env_map,
+# never a value, so this reads nothing secret.
+vars=$("$VLT_CMD" list --json "$name" 2>/dev/null | python3 -c '
+import json, sys
+name = sys.argv[1]
+try:
+    rec = json.load(sys.stdin).get(name)
+except ValueError:
+    rec = None
+if rec is None:
+    sys.exit(3)
+emap = rec.get("env_map") or {}
+if not emap:
+    # vlt exec derives the same names when a record has no env_map.
+    prov = name.split("/")[0].split(".")[0].upper().replace("-", "_")
+    emap = {"%s_%s" % (prov, f.upper()): f for f in rec.get("fields", [])}
+want = {"host", "port", "username", "password", "key"}
+print(" ".join("%s=%s" % (f, v) for v, f in sorted(emap.items()) if f in want))
+' "$name")
+case $? in
+  0) ;;
+  3) die "no vault record named '$name' (vlt list ssh shows what exists)" ;;
+  *) die "could not read the vault index" ;;
+esac
+
+VLT_SSH_OPTS=
+[ ${#opts[@]} -gt 0 ] && VLT_SSH_OPTS=$(printf '%q ' "${opts[@]}")
+VLT_SSH_CMD=
+[ $# -gt 0 ] && VLT_SSH_CMD=$(printf '%q ' "$@")
+export VLT_SSH_VARS=$vars VLT_SSH_OPTS VLT_SSH_CMD
+exec "$VLT_CMD" exec "$name" -- bash "$SELF" --vlt-ssh-inner

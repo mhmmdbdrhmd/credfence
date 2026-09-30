@@ -28,7 +28,7 @@ backup() {  # backup <file> — keep whatever was there before
 # --------------------------------------------------------------- uninstall
 if [ "${1:-}" = "--uninstall" ]; then
   head_ "Removing credfence"
-  rm -f "$BIN/vlt" "$SHARE/vltlib.py" "$SHARE/vltui.py"
+  rm -f "$BIN/vlt" "$BIN/vlt-ssh" "$SHARE/vltlib.py" "$SHARE/vltui.py"
   rm -f "$CLAUDE/hooks/vault-guard.py"
   rm -rf "$CLAUDE/skills/vault"
   python3 - "$CLAUDE/settings.json" <<'PY' || true
@@ -57,6 +57,8 @@ fi
 head_ "Checking requirements"
 
 command -v python3 >/dev/null || die "python3 is required"
+command -v sshpass >/dev/null \
+  || warn "no sshpass: vlt-ssh will log in with keys but not with passwords"
 PYV=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')
 python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3,8) else 1)' \
   || die "python3 >= 3.8 required (found $PYV)"
@@ -129,9 +131,12 @@ mkdir -p "$BIN" "$SHARE"
 chmod 700 "$SHARE"
 backup "$BIN/vlt"
 install -m 755 "$REPO/vlt" "$BIN/vlt"
+backup "$BIN/vlt-ssh"
+install -m 755 "$REPO/vlt-ssh" "$BIN/vlt-ssh"
 install -m 600 "$REPO/vltlib.py" "$SHARE/vltlib.py"
 install -m 600 "$REPO/vltui.py" "$SHARE/vltui.py"
 say "vlt        -> $BIN/vlt"
+say "vlt-ssh    -> $BIN/vlt-ssh"
 say "vltlib.py  -> $SHARE/"
 say "vltui.py   -> $SHARE/"
 

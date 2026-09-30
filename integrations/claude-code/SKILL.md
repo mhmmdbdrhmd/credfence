@@ -29,6 +29,7 @@ Need to authenticate to something
         │        │
         │        ├─ yes ─ vlt peek <name>        confirm fields + format
         │        │            │
+        │        │            ├─ logging in by ssh?  vlt-ssh <name> [cmd]
         │        │            ├─ running a command?  vlt exec <name> -- <cmd>
         │        │            ├─ program needs a file? vlt file / vlt render
         │        │            └─ never: vlt get / vlt show   (blocked)
@@ -113,6 +114,33 @@ placeholders named after the record's `env_map` keys.
 **Files written by `file` and `render` are registered as containing live secrets. You
 will be blocked from reading them back.** That is intentional — they are for the
 program to consume, not for you. If you need to check your work, use `vlt peek`.
+
+### SSH to a host — `vlt-ssh`
+
+For any `ssh`-type record, use `vlt-ssh` instead of assembling the login
+yourself. It works with a **key**, a **password**, or both, and you never see
+either:
+
+```bash
+vlt-ssh vps/alpha/ssh                            # interactive shell
+vlt-ssh vps/alpha/ssh uptime                     # one remote command
+vlt-ssh vps/alpha/ssh 'cd /srv && make'          # quote a compound one
+vlt-ssh -N -L 8080:localhost:80 vps/alpha/ssh    # ssh options go BEFORE the name
+```
+
+- Host, port and username come from the record, whatever its `env_map` calls them.
+- A key is written to a private 0600 file, passed with `-i`, and deleted when ssh
+  exits. A password goes to `sshpass` through its environment, never as `-p`.
+  With both, the key is tried first.
+- A first connection accepts the host key (`StrictHostKeyChecking=accept-new`);
+  a *changed* host key is still refused. Say so to the user; do not override it.
+- Without a tty, a key-only login runs with `BatchMode=yes`, so it fails instead
+  of hanging on a prompt.
+- For `scp`/`rsync`, `vlt-ssh` does not help: use `vlt exec` with a program that
+  reads the variables itself, or ask the user.
+
+Do not replace it with `vlt file … key` + `ssh -i`: that leaves a live key on disk
+that nothing cleans up.
 
 ### Request a missing credential
 ```bash

@@ -51,6 +51,7 @@ keys, tokens or passwords. Never ask for a credential value in chat.
   vlt list                          what exists
   vlt peek <name>                   structure only — length, charset, first chars
   vlt exec <name> -- <command>      run a command with it in the environment
+  vlt-ssh <name> [command]          ssh with a record's key or password
   vlt file <name> <field> --out P   write one field to a file
   vlt request <name> --fields a,b   missing? opens a window for the user
 Never print, echo, cat, log or commit a credential value.

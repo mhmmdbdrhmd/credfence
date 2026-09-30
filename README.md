@@ -1,6 +1,6 @@
 <h1 align="center">credfence</h1>
 <p align="center"><i>Let coding agents use your credentials without ever seeing them</i></p>
-<p align="center"><a href="https://github.com/mhmmdbdrhmd/credfence/actions"><img alt="CI" src="https://github.com/mhmmdbdrhmd/credfence/actions/workflows/tests.yml/badge.svg"></a> <img alt="platform" src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-6E7681?style=flat-square"> <img alt="python" src="https://img.shields.io/badge/python-3.8%2B-3776AB?style=flat-square&logo=python&logoColor=white"> <img alt="crypto" src="https://img.shields.io/badge/AES--256--GCM-per%20record-E7352C?style=flat-square"> <img alt="tests" src="https://img.shields.io/badge/tests-423%20assertions-58A6FF?style=flat-square"> <img alt="license" src="https://img.shields.io/badge/license-MIT-3FB950?style=flat-square"></p>
+<p align="center"><a href="https://github.com/mhmmdbdrhmd/credfence/actions"><img alt="CI" src="https://github.com/mhmmdbdrhmd/credfence/actions/workflows/tests.yml/badge.svg"></a> <img alt="platform" src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-6E7681?style=flat-square"> <img alt="python" src="https://img.shields.io/badge/python-3.8%2B-3776AB?style=flat-square&logo=python&logoColor=white"> <img alt="crypto" src="https://img.shields.io/badge/AES--256--GCM-per%20record-E7352C?style=flat-square"> <img alt="tests" src="https://img.shields.io/badge/tests-456%20assertions-58A6FF?style=flat-square"> <img alt="license" src="https://img.shields.io/badge/license-MIT-3FB950?style=flat-square"></p>
 
 > An agent can find out that a GitHub token exists, confirm it starts `ghp_` and
 > is 40 characters, and run `gh` with it in the environment — **without the value
@@ -119,7 +119,8 @@ cd credfence
 ./install.sh
 ```
 
-The installer checks requirements, installs the `vlt` command, creates the
+The installer checks requirements, installs the `vlt` and `vlt-ssh` commands
+(the latter needs `sshpass` for password logins), creates the
 vault, and — if it finds `~/.claude` — registers the guard hook and the agent
 skill. Re-running is safe: it never touches an existing vault, and it backs up
 anything it replaces. `./install.sh --uninstall` reverses all of that and leaves
@@ -196,6 +197,15 @@ structure only. To use it:  vlt exec github.com/example -- <command>
 vlt exec github.com/example -- gh repo list             # into a child's environment
 vlt file vps/alpha/ssh key --out ~/.ssh/k --mode 0600   # one field to one file
 vlt render --secret openai.com/example --out ./.env     # a whole config file
+```
+
+**SSH, with a key or a password.** `vlt-ssh` takes an `ssh` record's name where
+a host would go. The key becomes a 0600 file that is deleted when ssh exits; a
+password goes to `sshpass` through its environment, never as an argument:
+
+```bash
+vlt-ssh vps/alpha/ssh uptime                            # key, password, or both
+vlt-ssh -N -L 8080:localhost:80 vps/alpha/ssh           # ssh options before the name
 ```
 
 **Ask for what is missing.** The agent never asks you in chat:
@@ -514,13 +524,13 @@ python3 tests/run_all.py --fast     # skip the pty-driven UI suites
 python3 tests/run_all.py --count    # assertions per suite
 ```
 
-**423 assertions across 17 suites**, all passing, every one of them against a
+**456 assertions across 18 suites**, all passing, every one of them against a
 throwaway vault in a temp directory — never your real one, and never your
 keyring. That isolation is not tidiness: an earlier version ran against the
 developer's live vault, and a test that unmasked a field printed a production
 credential into the log.
 
-An eighteenth suite, `keyring_test`, runs only where a real keyring is present and
+A nineteenth suite, `keyring_test`, runs only where a real keyring is present and
 `VLT_KEYRING_TEST=1` is set, because it writes to the machine's own keyring. CI
 sets it; your laptop does not, and `run_all.py` reports it as *not run* rather
 than as a pass.
@@ -544,6 +554,10 @@ The four worth knowing about:
   through the vault, and asks **`ssh-keygen -y`** to accept what came back. It
   also asserts that OpenSSH *rejects* the same key with its trailing newline
   removed, so the byte is shown to be load-bearing rather than asserted to be.
+- **`vltssh_test.py`** — `vlt-ssh` logs in with a key and with a password
+  (the real `sshpass` answering a stand-in `ssh`'s prompt), and then for real,
+  against an unprivileged `sshd` on 127.0.0.1. It asserts that the key file is
+  0600 and gone afterwards, and that no value reaches output or ssh's argv.
 - **`notes_test.py`** — renders the browser through `pyte` and asserts the pane
   divider is in the same column on every row. A note that spans lines used to
   write its second line at column zero, over the tree.
@@ -558,8 +572,8 @@ The four worth knowing about:
 
 Being straight about what has been checked and what has not.
 
-**Verified — the suites, on this machine.** `python3 tests/run_all.py` runs 17
-suites and 423 assertions, and all pass; `--count`
+**Verified — the suites, on this machine.** `python3 tests/run_all.py` runs 18
+suites and 456 assertions, and all pass; `--count`
 reproduces that number per suite. The repository also passes from a **bare
 clone**, and `install.sh` succeeds from that clone into a sandbox prefix.
 
