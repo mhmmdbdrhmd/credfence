@@ -31,7 +31,10 @@ PROG=vlt-ssh
 die() { printf '%s: %s\n' "$PROG" "$*" >&2; exit 255; }
 
 usage() {
-  sed -n '2,/^[^#]/{/^#/!q;s/^# \{0,1\}//;p}' "${BASH_SOURCE[0]}"
+  # The header comment, minus its "# ". awk, not sed: BSD sed on macOS
+  # rejects the GNU brace syntax this once used.
+  awk 'NR == 1 { next } !/^#/ { exit } { sub(/^# ?/, ""); print }' \
+    "${BASH_SOURCE[0]}"
   exit "${1:-0}"
 }
 
